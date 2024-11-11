@@ -1,0 +1,42 @@
+version: '3.9'
+services:
+    postgres_classes:
+        image: postgres:16-alpine
+        container_name: classes_db
+        environment:
+            - POSTGRES_USER=root
+            - POSTGRES_PASSWORD=example
+            - POSTGRES_HOST=localhost
+            - POSTGRES_PORT=5432
+            - POSTGRES_DB=classes
+        ports:
+            - '5252:5432'
+        volumes:
+            - ./_install_db/dumps/dump.sql:/docker-entrypoint-initdb.d/dump.sql
+            - ./db-volumes/database/classes:/var/lib/postgresql/data
+
+    classes_service:
+        container_name: classes-service
+        restart: always
+        build:
+            context: ./
+            dockerfile: Dockerfile
+        expose:
+            - '5005'
+        ports:
+            - '127.0.0.1:5005:5005'
+        volumes:
+            - ./var/log:/var/classes/log
+            - ./:/app
+            - /app/node_modules
+
+        environment:
+            - PORT=5005
+            - DATABASE_URL=postgresql://root:example@classes_db:5432/classes?schema=public
+            - NODE_ENV=development
+            - LOG_LEVEL=debug
+        depends_on:
+            - postgres_classes
+networks:
+    classes_network:
+        driver: bridge
