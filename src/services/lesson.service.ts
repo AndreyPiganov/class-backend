@@ -8,11 +8,12 @@ class LessonService {
     async getLessonsByFilter(filterConditions: any, page: number = 1, lessonsPerPage: number = 5): Promise<Lesson[]> {
         try {
             const query = db('lessons')
+                .distinct('lessons.id')
                 .leftJoin('lesson_students', 'lessons.id', '=', 'lesson_students.lesson_id')
                 .leftJoin('lesson_teachers', 'lessons.id', '=', 'lesson_teachers.lesson_id')
                 .leftJoin('teachers', 'lesson_teachers.teacher_id', '=', 'teachers.id')
-                .select('lessons.*', 'teachers.id as teacher_id', 'teachers.name as teacher_name')
-                .count('lesson_students.student_id as visitCount')
+                .select('lessons.*')
+                .select(db.raw('COUNT(CASE WHEN lesson_students.visit = true THEN 1 ELSE NULL END) AS visitCount'))
                 .groupBy('lessons.id', 'teachers.id');
 
             if (filterConditions.date) {
@@ -54,7 +55,7 @@ class LessonService {
 
             const offset = (page - 1) * lessonsPerPage;
             const lessons = await query.offset(offset).limit(lessonsPerPage);
-
+            console.log(lessons);
             const lessonsWithStudents = await Promise.all(
                 lessons.map(async (lesson) => {
                     const students = await db('students')
@@ -62,21 +63,26 @@ class LessonService {
                         .where('lesson_students.lesson_id', '=', lesson.id)
                         .select('students.id as student_id', 'students.name as student_name');
 
+                    const teachers = await db('teachers')
+                        .leftJoin('lesson_teachers', 'teachers.id', '=', 'lesson_teachers.teacher_id')
+                        .where('lesson_teachers.lesson_id', '=', lesson.id)
+                        .select('teachers.id as teacher_id', 'teachers.name as teacher_name');
+
                     return {
                         id: lesson.id,
                         date: lesson.date,
                         title: lesson.title,
                         status: lesson.status,
-                        visitCount: lesson.visitCount,
+                        visitCount: lesson.visitcount,
                         students: students.map((student) => ({
                             id: student.student_id,
                             name: student.student_name
                         })),
                         teachers: [
-                            {
-                                id: lesson.teacher_id,
-                                name: lesson.teacher_name
-                            }
+                            teachers.map((teacher) => ({
+                                id: teacher.teacher_id,
+                                name: teacher.teacher_name
+                            }))
                         ]
                     };
                 })
